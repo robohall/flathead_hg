@@ -1,0 +1,803 @@
+---
+title: "Appendix S2. Full fish consumption survey results"
+
+output:
+  output: pdf_document
+toc: false
+header-includes:
+  - \usepackage{caption}
+  - \DeclareCaptionLabelFormat{nospace}{#1-#2}
+  - \captionsetup[figure]{labelformat=nospace}
+  - \captionsetup[table]{labelformat=nospace}
+
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(bookdown)
+```
+
+\def\figurename{Figure S2}
+\def\tablename{Table S2}
+
+
+```{r DataClean, include=FALSE}
+library(tidyverse)
+library(here)     # file paths
+library(lubridate)
+library(arm)
+library(janitor) # frequency tables & crosstabs
+
+options(scipen = 100)  # disabled scientific notation
+
+##########################
+## Data prep for analysis
+##########################
+
+## Delete rows 2 & 3 in downloaded data file before importing
+mydata <- read_csv(
+  here("data/raw_data/EPA_fish_consumption.csv"))
+mydata <- dplyr::select(mydata, Q2:Q45)
+
+# add an id number
+mydata <- mydata %>%
+  mutate(id = 1:n()) %>%
+  relocate(id)
+
+# convert character vectors to numeric
+mydata <- mydata %>% mutate_if(is.character, as.numeric)
+
+### filter data for eligible respondents - 
+# 55 years of age or younger
+mydata <- filter(mydata, Q43_1_TEXT < 56)
+mydata <- filter(mydata, Q43_1_TEXT != -99)
+
+# Potential respondents intercepted at food pantries
+answers <- c("Yes", "No", "Don't know/Not sure", "Preferred not to answer")
+
+coding <- function(x) {
+  if_else(x==1, "Yes", if_else(x==2,"No", "Don't know/Not sure"))
+}
+mydata <- mydata %>%
+  mutate_at(vars("Q2","Q4", "Q6"), list(factor=coding))
+
+mydata <- mydata %>%  
+  mutate(across(c(Q2_factor, Q4_factor, Q6_factor), ~factor(.x, levels=answers))) 
+
+# Replace -99 with NA
+mydata <- mydata %>%
+  mutate(across(where(is.numeric), ~na_if(., -99)))
+
+### generate new variables as factors ###
+# tribal enrollment
+tribal <- c("Salish", "Kootenai", "Pend d'Oreille","Other", "Don't know/Prefer not to answer")
+
+mydata <- mydata %>%
+  mutate(
+    Q3_factor = case_when(
+      Q2 == 1 & Q3 == 1 ~ "Salish",
+      Q2 == 1 & Q3 == 2   ~ "Kootenai",
+      Q2 == 1 & Q3 == 3  ~ "Pend d'Oreille",
+      Q2 == 1 & Q3 == 4 ~ "Don't know/Prefer not to answer"),
+    Q3_factor = factor(Q3_factor, levels = tribal)
+  )
+
+mydata <- mydata %>%
+  mutate(
+    Tribal.factor = case_when(
+      Q2 == 1 & Q3 == 1 ~ "Salish",
+      Q2 == 1 & Q3 == 2   ~ "Kootenai",
+      Q2 == 1 & Q3 == 3  ~ "Pend d'Oreille",
+      Q4 == 1 ~ "Other"),
+    Tribal.factor = factor(Tribal.factor, levels = tribal)
+    )
+# fish meal levels - included "One or fewer" to mimic 2008 study category
+# for those who replied yes to eating fish, but number of meals was recorded as zero, assumed "1 or fewer" meals per month
+fish_meals <- c("Zero", "One meal or less", "2-4 meals", "5-8 meals", "9 or more")
+mydata <- mydata %>%
+  mutate(
+    Meal.factor = case_when(
+      is.na(Q13_1_TEXT) ~ "Zero",
+      Q13_1_TEXT == 0 ~ "One meal or less",
+      Q13_1_TEXT == 1 ~ "One meal or less",
+      between(Q13_1_TEXT,2,4) ~ "2-4 meals",
+      between(Q13_1_TEXT,5,8) ~ "5-8 meals",
+      TRUE ~ "9 or more"),
+    Meal.factor = factor(Meal.factor, levels = fish_meals)
+    )
+
+# Size of catch
+catch_size <- c("Small (less than 14 in.)", "Medium (14 to 26 in.)", "Large (over 26 in.)", "Don't know/Not sure", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    Catch.factor = case_when(
+      Q32 == 1 ~ "Small (less than 14 in.)",
+      Q32 == 2 ~ "Medium (14 to 26 in.)",
+      Q32 == 3 ~ "Large (over 26 in.)",
+      Q32 == 4 ~ "Don't know/Not sure",
+      Q32 == 5 ~ "Preferred not to answer"),
+    Catch.factor = factor (Catch.factor, levels  = catch_size)
+    )
+# Knowledge of Hg contamination
+Hg_know <- c("A lot", "Some", "Very little", "Nothing at all", "Don't know/Not sure", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    HgKnow.factor = case_when(
+      Q34 == 1 ~ "A lot",
+      Q34 == 2  ~ "Some",
+      Q34 == 3 ~ "Very little",
+      Q34 == 4 ~ "Nothing at all",
+      Q34 == 5 ~ "Don't know/Not sure",
+      Q34 == 6 ~ "Preferred not to answer"),
+    HgKnow.factor = factor(HgKnow.factor, levels = Hg_know)
+    )
+# Knowledge of fish species
+mydata <- mydata %>%
+  mutate(
+    Species.factor = case_when(
+      Q38 == 1 ~ "A lot",
+      Q38 == 2  ~ "Some",
+      Q38 == 3 ~ "Very little",
+      Q38 == 4 ~ "Nothing at all",
+      Q38 == 5 ~ "Don't know/Not sure",
+      Q38 == 6 ~ "Preferred not to answer"),
+    Species.factor = factor(Species.factor, levels = Hg_know)
+    )
+# Knowledge of size restrictions
+mydata <- mydata %>%
+  mutate(
+    Size.factor = case_when(
+      Q39 == 1 ~ "A lot",
+      Q39 == 2  ~ "Some",
+      Q39 == 3 ~ "Very little",
+      Q39 == 4 ~ "Nothing at all",
+      Q39 == 5 ~ "Don't know/Not sure",
+      Q39 == 6 ~ "Preferred not to answer"),
+    Size.factor = factor(Size.factor, levels = Hg_know)
+    )
+# Knowledge of amount of fish one can eat
+mydata <- mydata %>%
+  mutate(
+    Quantity.factor = case_when(
+      Q40 == 1 ~ "A lot",
+      Q40 == 2  ~ "Some",
+      Q40 == 3 ~ "Very little",
+      Q40 == 4 ~ "Nothing at all",
+      Q40 == 5 ~ "Don't know/Not sure",
+      Q40 == 6 ~ "Preferred not to answer"),
+    Quantity.factor = factor(Quantity.factor, levels = Hg_know)
+    )
+# Visits to food pantry
+visits <- c("Every month", "Every other month", "Once every 3 months", "Infrequently", "Don't know/Not sure", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    Visit.factor = case_when(
+      Q42 == 1 ~ "Every month",
+      Q42 == 2 ~ "Every other month",
+      Q42 == 3 ~ "Once every 3 months",
+      Q42 == 4 ~ "Infrequently",
+      Q42 == 5 ~ "Don't know/Not sure",
+      Q42 == 6 ~ "Preferred not to answer"),
+    Visit.factor = factor (Visit.factor, levels = visits)
+    )
+# Age categories
+ages <- c("Under 18", "18-25", "26-35", "36-45", "46-55", "55+", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    Age.factor = case_when(
+      is.na(Q43_1_TEXT) ~ "Preferred not to answer",
+      between(Q43_1_TEXT,0,17)  ~ "Under 18",
+      between(Q43_1_TEXT,18,25) ~ "18-25",
+      between(Q43_1_TEXT,26,35) ~ "26-35",
+      between(Q43_1_TEXT,36,45) ~ "36-45",
+      between(Q43_1_TEXT,46,55) ~ "46-55",
+      TRUE ~ "55+"),
+    Age.factor = factor(Age.factor, levels = ages)
+  )
+# Relationship categories
+relation <- c("Single", "Married", "Member of an unmarried couple", "Divorced/Separated", "Don't know/Not sure", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    Relationship.factor = case_when(
+      Q44 == 1 ~ "Single",
+      Q44 == 2 ~ "Married",
+      Q44 == 3 ~ "Member of an unmarried couple",
+      Q44 == 4 ~ "Divorced/Separated",
+      Q44 == 5 ~ "Don't know/Not sure",
+      TRUE ~ "Preferred not to answer"),
+    Relationship.factor = factor(Relationship.factor, levels = relation)
+    )
+# Education categories
+education <- c("Less than high school", "High school or GED", "Associates degree", "Bachelors degree", "Graduate degree", "Don't know/Not sure", "Preferred not to answer")
+mydata <- mydata %>%
+  mutate(
+    Education.factor = case_when(
+      Q45 == 1 ~ "Less than high school",
+      Q45 == 2 ~ "High school or GED",
+      Q45 == 3 ~ "Associates degree",
+      Q45 == 4 ~ "Bachelors degree",
+      Q45 == 5 ~ "Graduate degree",
+      Q45 == 6 ~ "Don't know/Not sure",
+      TRUE ~ "Preferred not to answer"),
+    Education.factor = factor(Education.factor, levels = education)
+    )
+# Yes, no and don't know questions
+answers <- c("Yes", "No", "Don't know/Not sure", "Preferred not to answer")
+
+coding <- function(x) {
+  if_else(x==1, "Yes", if_else(x==2,"No", "Don't know/Not sure"))
+}
+mydata <- mydata %>%
+  mutate_at(vars("Q14":"Q31", "Q35"), list(factor=coding))
+
+mydata <- mydata %>%  
+  mutate(across(c(Q14_factor:Q31_factor, Q35_factor), ~factor(.x, levels=answers))) 
+
+# Eats fish
+##fish_meals <- c("Zero", "Less than one", "One meal", "2-4 meals", "5-8 meals", "9 or more")
+mydata <- mydata %>%
+  mutate(Fish.eater = ifelse(`Meal.factor` == "Zero", 0, 1))
+
+### Summary tables ###
+# Enrolled member of CSKT  
+Enrolled.CSKT.out <- mydata %>%
+  count(Q2_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+
+# Tribal identification among CSKT
+Tribe.CSKT.out <- mydata %>%
+  filter(!is.na(Q3_factor)) %>%
+  count(Q3_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+
+# Enrolled in any American Indian tribe
+Enrolled.Other.out <- mydata %>%
+  filter(!is.na(Q4_factor)) %>%
+  count(Q4_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+
+# Tribal affiliation -all- of surveyed individuals
+Tribal.out <- mydata %>%
+  filter(!is.na(Tribal.factor)) %>%
+  count(Tribal.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+
+### filter data for eligible respondents - 
+# enrolled in CSKT or other recognized tribe
+mydata <- filter(mydata, Q9 == 1)
+
+# Meal frequency in 2021 & 2008
+Meal.out <- mydata %>%
+  count(Meal.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Meal.out <- Meal.out %>%
+  add_column(n.2008=c("--", 36, 23, 6), percent.2008=c("--", 55, 35, 10))%>%
+  group_by(Meal.factor)
+
+### Fish products bought at markets
+# Shellfish
+Market.Shellfish.out <- mydata %>%
+  filter(!is.na(Q14_factor)) %>%
+  count(Q14_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Fish fillets, fish sticks, or fish sandwiches
+Market.Fillets.out <- mydata %>%
+  filter(!is.na(Q16_factor)) %>%
+  count(Q16_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Light tuna
+Market.Tuna.out <- mydata %>%
+  filter(!is.na(Q19_factor)) %>%
+  count(Q19_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Albacore tuna
+Market.Albacore.out <- mydata %>%
+  filter(!is.na(Q20_factor)) %>%
+  count(Q20_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+### Fish products received from the food pantry
+# Shellfish
+Pantry.Shellfish.out <- mydata %>%
+  filter(!is.na(Q21_factor)) %>%
+  count(Q21_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Pantry.Fillets.out <- mydata %>%
+  filter(!is.na(Q22_factor)) %>%
+  count(Q22_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Light tuna
+Pantry.Tuna.out <- mydata %>%
+  filter(!is.na(Q24_factor)) %>%
+  count(Q24_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Albacore tuna
+Pantry.Albacore.out <- mydata %>%
+  filter(!is.na(Q25_factor)) %>%
+  count(Q25_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Ate fish donated to food pantry (Q26)
+Donated.fish.out <- mydata %>%
+  filter(!is.na(Q26_factor)) %>%
+  count(Q26_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Ate donated Lake Trout (Q27)
+Donated.lake.trout.out <- mydata %>%
+  filter(!is.na(Q27_factor)) %>%
+  count(Q27_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Ate donated whitefish (Q28)
+Donated.whitefish.out <- mydata %>%
+  filter(!is.na(Q28_factor)) %>%
+  count(Q28_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Ate angler caught fish (Q29) + 2008 study results
+Caught.fish.out <- mydata %>%
+  filter(!is.na(Q29_factor)) %>%
+  count(Q29_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Caught.fish.out <- Caught.fish.out %>%
+  rename(n.2021=n, percent.2021=percent)
+Caught.fish.out <- Caught.fish.out %>%
+  add_column(n.2008=c(33, 32), percent.2008=c(51, 49))%>%
+  group_by(Q29_factor)
+Caught.fish.out <- setNames(Caught.fish.out, c("Q29_factor","n", "percent", "n", "percent")) # rename columns in base R
+# Ate angler caught lake trout (Q30)
+Caught.lake.trout.out <- mydata %>%
+  filter(!is.na(Q30_factor)) %>%
+  count(Q30_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Ate angler caught whitefish (Q31)
+Caught.whitefish.out <- mydata %>%
+  filter(!is.na(Q31_factor)) %>%
+  count(Q31_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Size of angler caught fish
+Catch.Size.out <- mydata %>%
+  filter(!is.na(Catch.factor)) %>%
+  count(Catch.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+### Knows about mercury contamination + 2008 study results
+HgKnow.out <- mydata %>%
+  count(HgKnow.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+HgKnow.out <- HgKnow.out %>%
+  rename(n.2021=n, percent.2021=percent)
+HgKnow.out <- HgKnow.out %>%
+  add_column(n.2008=c(1, 8, 28, 28, 0), percent.2008=c(2, 12, 43, 43, 0)) %>%  
+  group_by(HgKnow.factor)
+# rename columns in base R
+HgKnow.out <- setNames(HgKnow.out, c("HgKnow.factor","n", "percent", "n", "percent")) 
+### Awareness of CSKT's fish advisory (Q35) + 2008 study results
+Advisory.out <- mydata %>%
+  count(Q35_factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Advisory.out <- Advisory.out %>%
+  rename(n.2021=n, percent.2021=percent)
+Advisory.out <- Advisory.out %>%
+  add_column(n.2008=c(13, 52, 0), percent.2008=c(20, 80, 0))%>%
+  group_by(Q35_factor)
+# rename columns in base R
+Advisory.out <- setNames(Advisory.out, c("Advisory.factor","n", "percent", "n", "percent")) 
+### Source for learning about CSKT's fish advisory
+Knew <- as.vector(Advisory.out[1,2])  # total number of recipients that knew of advisory
+
+Advisory.source <- mydata %>% 
+  summarise(across(Q36_1:Q36_9, \(x) sum(x, na.rm=TRUE))) %>% 
+  t()  # rotates columns to rows
+Advisory.source <- as.data.frame(Advisory.source) 
+  
+colnames(Advisory.source)[1] <- "Count"
+rownames(Advisory.source) <- NULL
+
+Advisory.source <- Advisory.source %>%
+  dplyr::select(Count) %>% 
+  mutate(Percent=round((Count/19*100), digits=0))
+
+Advisory.source <- cbind(c("TV", "Radio", "Internet", "Brochures", "Mack Days", 
+                           "Tribal government agencies", "Talking to doctors/health professional",
+                           "Talking to people you know", "Signs or posters"), 
+                           Advisory.source)
+colnames(Advisory.source)[1] <- "Source"
+
+### Knowledge of fish species + 2008 study results
+Species.out <- mydata %>%
+  filter(!is.na(Species.factor)) %>%
+  count(Species.factor, .drop=FALSE) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Species.out <- Species.out %>% 
+  filter(!row_number() %in% c(5,6))
+Species.out <- Species.out %>%
+  rename(n.2021=n, percent.2021=percent)
+Species.out <- Species.out %>%
+  add_column(n.2008=c(0, 0, 6, 7), percent.2008=c(0, 0, 46, 54))%>%
+  group_by(Species.factor)
+# rename columns in base R
+Species.out <- setNames(Species.out, c("Species.factor","n", "percent", "n", "percent")) 
+### Knowledge of fish size
+Size.out <- mydata %>%
+  filter(!is.na(Size.factor)) %>%
+  count(Size.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Size.out <- Size.out %>%
+  rename(n.2021=n, percent.2021=percent)
+Size.out <- Size.out %>%
+  add_column(n.2008=c(0, 1, 5, 7), percent.2008=c(0, 8, 38, 54))%>%
+  group_by(Size.factor)
+# rename columns in base R
+Size.out <- setNames(Size.out, c("Size.factor","n", "percent", "n", "percent")) 
+### Knowledge of amount of fish
+Quantity.out <- mydata %>%
+  filter(!is.na(Quantity.factor)) %>%
+  count(Quantity.factor) %>%
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+Quantity.out <- Quantity.out %>%
+  rename(n.2021=n, percent.2021=percent)
+Quantity.out <- Quantity.out %>%
+  add_column(n.2008=c(0, 0, 6, 7), percent.2008=c(0, 0, 46, 54))%>%
+  group_by(Quantity.factor)
+# rename columns in base R
+Quantity.out <- setNames(Quantity.out, c("Quantity.factor","n", "percent", "n", "percent")) 
+
+### Demographics
+# Number of visits to the food pantry per month
+Visits.out <- mydata %>% 
+  count(Visit.factor) %>% 
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Age
+Age.out <- mydata %>% 
+  count(Age.factor) %>% 
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Relationship status
+Relationship.out <- mydata %>% 
+  count(Relationship.factor) %>% 
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+# Education
+Education.out <- mydata %>% 
+  count(Education.factor) %>% 
+  mutate(percent=round((n/sum(n)*100), digits = 0))
+```
+## Results of Food Pantry Survey
+
+Summarized below are the results of surveys completed with female Tribal members of child-bearing age relying on assistance from food pantries.  The survey included questions that assess fish consumption and advisory awareness plus demographic questions.
+
+## Screening for tribal enrollment
+
+Q2. I have to ask, are you an enrolled member of the Confederated Salish and Kootenai Tribes? 
+```{r Enrolled, echo=FALSE, message=FALSE, warning=FALSE}
+library(kableExtra)
+knitr::kable(Enrolled.CSKT.out,
+       booktabs = TRUE,
+       col.names = c("Enrolled in CSKT","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Respondents enrolled in CSKT') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+  
+```
+
+Q3. Which Tribe in the Confederation do you identify with most closely?
+```{r Tribes, echo=FALSE, message=FALSE, warning=FALSE}
+library(kableExtra)
+knitr::kable(Tribe.CSKT.out,
+       booktabs = TRUE,
+       col.names = c("Tribe","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Respondents CSKT tribal affiliation') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+  
+```
+
+Q4. Are you enrolled in any American Indian tribe or Alaska Native tribe or village?
+```{r Other tribe, echo=FALSE, message=FALSE, warning=FALSE}
+library(kableExtra)
+knitr::kable(Enrolled.Other.out,
+       booktabs = TRUE,
+       col.names = c("Enrolled in any tribe","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Respondents enrolled in any American Indian tribe or Alaska Native tribe or village') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+
+```
+\newpage
+```{r Eligible summary, echo=FALSE, message=FALSE, warning=FALSE}
+library(kableExtra)
+knitr::kable(Tribal.out,
+       booktabs = TRUE,
+       col.names = c("Tribe","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Eligible responents by tribal affiliation') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+
+## Fish Consumption
+This first set of questions are about how much fish you eat in a typical month, the types of fish, and where the fish came from.
+
+Q13. During the average month, about how many meals of fish do you eat including all types of freshwater and saltwater fish either purchased, received from a food pantry, or caught in local waters?
+
+```{r Meals, echo=FALSE}
+knitr::kable(Meal.out,
+       booktabs = TRUE,
+       col.names = c("Meals","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Amount of fish consumed') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position")) %>% 
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+
+```
+
+*The following questions were asked of those who said they eat at least one fish meal in an average month.*
+
+Q14. Over the last 12 months, whate types of fish did you **purchase at a market or store**? Did you **purchase** shellfish such as shrimp, lobster, clams, crab, crayfish, or imitation shellfish?
+```{r Market Shellfish, echo=FALSE}
+knitr::kable(Market.Shellfish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Purchased shellfish (shrimp, lobster, clams, crab, crayfish, or imitation shellfish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q16. Did you **purchase** fish fillets, fish sticks, or fish sandwiches?
+```{r Market Fillets, echo=FALSE}
+knitr::kable(Market.Fillets.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Purchased fish fillets, fish sticks, or fish sandwiches') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+\newpage
+Q18. Did you **purchase** either light tuna or albacore tuna?
+
+Q19. Light tuna
+```{r Market Tuna, echo=FALSE}
+knitr::kable(Market.Tuna.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Purchased light tuna') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q20. Albacore tuna
+```{r Market Albacore, echo=FALSE}
+knitr::kable(Market.Albacore.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Purchased albacore tuna') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q21. Over the last 12 months, what types of fish did you **receive from the food pantry**? Did you **receive** shellfish such as shrimp, lobster, clams, crab, crayfish, or imitation shellfish?
+```{r Pantry Shellfish, echo=FALSE}
+knitr::kable(Pantry.Shellfish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Food pantry supplied shellfish (shrimp, lobster, clams, crab, crayfish, or imitation shellfish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+
+```
+
+Q22. Did you **receive** fish fillets, fish sticks, or fish sandwiches?
+```{r Pantry Fillets, echo=FALSE}
+knitr::kable(Pantry.Fillets.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Food pantry supplied fish fillets, fish sticks, or fish sandwiches') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q23. Did you **receive** either light tuna or albacore tuna?
+
+Q24. Light tuna
+```{r Pantry Tuna, echo=FALSE}
+knitr::kable(Pantry.Tuna.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Food pantry supplied light tuna') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+\newpage
+Q25. Albacore tuna
+```{r Pantry Albacore, echo=FALSE}
+knitr::kable(Pantry.Albacore.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Food pantry supplied albacore tuna') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q26. Do you or your family ever eat fish fillets **donated** to this food pantry by the Tribes?
+```{r Donated fish, echo=FALSE}
+knitr::kable(Donated.fish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate fish fillets donated by the Tribes') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q27. When you eat tribally **donated** fish fillets, which types of fish do you normally eat? Do you eat lake trout?
+```{r Donated Lake Trout, echo=FALSE}
+knitr::kable(Donated.lake.trout.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate donated lake trout fillets') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q28. Do you eat lake whitefish?
+```{r Donated Whitefish, echo=FALSE}
+knitr::kable(Donated.whitefish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate donated whitefish fillets') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q29. Do you or your family ever eat fish **caught** from Flathead Lake either by you, a family member, or a friend of the family?
+```{r Caught, echo=FALSE}
+knitr::kable(Caught.fish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate locally caught fish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+\newpage
+Q30. When you or your family eat fish **caught** from Flathead Lake, which types of fish do you eat? Do you eat lake trout?
+```{r Caught LT, echo=FALSE}
+knitr::kable(Caught.lake.trout.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate locally caught lake trout') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+```
+
+Q31. Do you eat lake whitefish?
+```{r Caught WF, echo=FALSE}
+knitr::kable(Caught.whitefish.out,
+       booktabs = TRUE,
+       col.names = c("","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Ate locally caught whitefish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position"))
+
+```
+
+Q32. When you or your family eat fish **caught** from Flathead Lake, are they generally small (less than 14 inches), medium (between 14 and 26 inches), or large (over 26 inches)?
+```{r CaughtSize, echo=FALSE}
+knitr::kable(Catch.Size.out,
+       booktabs = TRUE,
+       col.names = c("Size","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Size of locally caught fish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+
+```
+## Knowledge of Mercury Contamination in Fish & Consumption Advisory
+This next set of questions are about mercury contamination in fish and fish consumption advisories
+
+Q34. How much do you know about mercury contaminants in fish? Would you say you know a lot, some, very little or nothing at all?
+```{r HgKknowledge, echo=FALSE}
+knitr::kable(HgKnow.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Knowledge of mercury contamination in fish') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+\newpage
+Q35. Some states and tribes issue consumption advice for fish contaminated with mercury.  Are you aware of CSKT's advisory on eating locally caught fish?
+```{r CSKT HgKknowledge, echo=FALSE}
+knitr::kable(Advisory.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Knowledge of CSKTs fish consumption advisory') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+*The following questions were asked of respondents who said they were aware of CSKT's fish advisory*
+
+Q36. Where did you learn about CSKT's fish advisory? (check all that apply)
+```{r Source, echo=FALSE}
+knitr::kable(Advisory.source,
+       booktabs = TRUE,
+       col.names = c("Source","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Source for learning about CSKT fish advisory') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q38. How much would you say you know about the following parts of the fish consumption guidelines. The fish species included in the advisory?  Would you say you know a lot, some, very little or nothing at at all?
+```{r Species HgKknowledge, echo=FALSE}
+knitr::kable(Species.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Knowledge of species included in the advisory') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+\newpage
+Q39. The size of the fish that should be avoided?  Would you say you know a lot, some, very little or nothing at all?
+```{r Size HgKknowledge, echo=FALSE}
+knitr::kable(Size.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Knowledge of size of fish to be avoided') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+
+Q40. The amount of fish that can be safely eaten? Would you say you know a lot, some, very little or nothing at all?
+```{r Quantity HgKknowledge, echo=FALSE}
+knitr::kable(Quantity.out,
+       booktabs = TRUE,
+       col.names = c("","n","%", "n", "%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Knowledge of the amount of fish that can be eaten safely') %>%
+  kable_styling(full_width=FALSE, latex_options=c("HOLD_position")) %>%
+  add_header_above(c(" " = 1, "2021 study"= 2, "2008 study"= 2))
+```
+## Demographics
+This is the last set of questions I have for you today.
+
+Q42. How often did you visit this food pantry over the last year?  Did you visit every month, every other month, once every 3 months or infrequently?
+```{r Visits, echo=FALSE}
+knitr::kable(Visits.out,
+       booktabs = TRUE,
+       col.names = c("Size","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Frequency of food pantry use') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+\newpage
+Q43. What is your age?
+```{r Age, echo=FALSE}
+knitr::kable(Age.out,
+       booktabs = TRUE,
+       col.names = c("Size","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Age distribution') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q44. What is your relationship status?  Are you singel, married, member of an unmarried couple, divorced or separated?
+```{r Relationship, echo=FALSE}
+knitr::kable(Relationship.out,
+       booktabs = TRUE,
+       col.names = c("Size","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Relationship status') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+```
+
+Q45. What is the highest level of education that you've completed?
+```{r Education, echo=FALSE}
+knitr::kable(Education.out,
+       booktabs = TRUE,
+       col.names = c("Size","n","%"), 
+       align = c('l', rep('c', 4)),
+       caption = 'Educational level completed') %>%
+  kable_styling(full_width=FALSE, latex_options=c("hold_position"))
+
+```
+
+
+
+

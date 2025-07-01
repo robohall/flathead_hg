@@ -1,4 +1,6 @@
 
+###Code for food web part of manuscript
+###Authors:  Bob Hall and Tyler Tappenbeck
 
 library(readxl)
 library(csvread)
