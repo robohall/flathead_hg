@@ -465,3 +465,32 @@ text(24,95, "Lake Whitefish")
 mtext("% times where FDA Hg dose is exceeded", side = 2, line = -0.5, outer = TRUE, cex=0.8) 
 
 dev.off()
+
+
+
+######same figure as EPS
+
+setEPS()
+postscript("figures/dose_exceedence_plot.eps", width = 3.5, height=5)
+
+par(mfcol=c(2,1), mai=c(0.62,0.6,0.1,0.1), mgp=c(2,1,0), omi=c(0.03,0.2,0.03,0.03), cex=0.8)
+
+plot(prob_dose$length, prob_dose$meal1, ylim=c(0,100), xlim=c(18,36), ylab="", xlab="Fish length (inches)", pch=16, col="darkgreen", axes=F)
+axis(1)
+axis(2)
+points(prob_dose$length, prob_dose$meal2, pch=16, col="orange")
+points(prob_dose$length, prob_dose$meal3, pch=16, col="darkred")
+text(24,95, "Lake Trout")
+
+plot(prob_dose_whitefish$length,  prob_dose_whitefish$meal1, ylim=c(0,100), xlim=c(18,36), ylab="", xlab="Fish length (mm)", pch=16, col="dark green", axes=F)
+axis(1, at=c(500/25.4, 600/25.4,700/25.4,800/25.4, 900/25.4), lab=c("500", "600", "700", "800", "900"))
+axis(2)
+points(prob_dose_whitefish$length, prob_dose_whitefish$meal2, pch=16, col="orange")
+points(prob_dose_whitefish$length, prob_dose_whitefish$meal3, pch=16, col="darkred")
+legend(30, 100, legend=c("1 meal", "2 meals", "3 meals"), pch=16,
+       col = c("darkgreen","orange", "darkred"))
+text(24,95, "Lake Whitefish")
+
+mtext("% times where FDA Hg dose is exceeded", side = 2, line = -0.5, outer = TRUE, cex=0.8) 
+
+dev.off()
