@@ -107,6 +107,9 @@ FinalHg <- FinalHg %>% mutate(LogMeHg = log(MeHg_dw))
 
 Fish <- FinalHg %>% filter(SpeciesCode %in% c("BUTR", "LATR", "LAWF"))
 
+Fish %>%
+  count(SpeciesCode)
+
 Fish$Month_Year <- as.factor(as.character(Fish$Month_Year))
 
 daph15N<- mean(FinalHg$d15N[FinalHg$SpeciesCode=="DAPH"])
@@ -125,7 +128,6 @@ latr$bc<- 1e5* latr$Weight_g / latr$Length_mm^3
 
 butr<- FinalHg[FinalHg$SpeciesCode=="BUTR", ]
 lawf<- FinalHg[FinalHg$SpeciesCode=="LAWF", ]
-
 
 
 
@@ -462,7 +464,7 @@ legend(30, 100, legend=c("1 meal", "2 meals", "3 meals"), pch=16,
        col = c("darkgreen","orange", "darkred"))
 text(24,95, "Lake Whitefish")
 
-mtext("% times where FDA Hg dose is exceeded", side = 2, line = -0.5, outer = TRUE, cex=0.8) 
+mtext("Frequency of exceeding FDA Hg dose (%)", side = 2, line = -0.5, outer = TRUE, cex=0.8) 
 
 dev.off()
 
@@ -494,3 +496,48 @@ text(24,95, "Lake Whitefish")
 mtext("% times where FDA Hg dose is exceeded", side = 2, line = -0.5, outer = TRUE, cex=0.8) 
 
 dev.off()
+
+
+######Total vs MeHg
+ggplot(FinalHg, aes(x=THg_dw, y=MeHg_dw, color=SpeciesCode)) + geom_point(size=1, na.rm = TRUE) +
+  scale_x_continuous(trans='log10')+
+  scale_y_continuous(trans='log10')+
+  theme_classic()+
+  scale_colour_manual(values=point_color) +
+  
+  labs(title = "",
+       subtitle = "",
+       #caption =,
+       #tag = "Figure 1",
+       x =   "Total Hg (ng/g dry mass)",
+       y = "MeHg (ng/g dry mass)") +
+  
+  geom_abline(intercept=0, slope=1,  color="darkgray", size=0.5)
+
+
+ggplot(Fish, aes(x=THg_dw, y=MeHg_dw, color=SpeciesCode)) + geom_point(size=1, na.rm = TRUE) 
+
+ggsave("figures/total_vs_methyl.pdf", 
+       #encoding="MacRoman",
+       width = 6, #size that you want
+       height = 4, #size that you want
+       units = "in")
+
+
+#####ratio vs trophic level
+
+ggplot(FinalHg, aes(x=SpeciesCode, y=MeHg_dw/THg_dw, color=SpeciesCode)) + geom_point(size=1, na.rm = TRUE, position="jitter") +
+  theme_classic()+
+  theme(legend.position = "none")+
+  ylim(0,1.2)+
+  geom_hline(yintercept = 1, linetype = "dotted", color = "darkgray")+ 
+  labs(y="Fraction MeHg", x= "Species code")
+
+ggsave("figures/methyl_fraction.pdf", 
+       #encoding="MacRoman",
+       width = 5, #size that you want
+       height = 4, #size that you want
+       units = "in")
+
+
+
